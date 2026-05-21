@@ -1642,8 +1642,9 @@ def bisect_regex_in_n_size_chunks(size, test_text, regexes, bookend=True, timeou
     return {'matches': matches, 'timeouts': timeouts}
 
 
-def bisect_number_list(s, full_number_list, filename):
+def bisect_number_list(s: str, full_number_list, filename: str, include_partial=False):
     candidates, normalized_candidates, deobfuscated_candidates = phone_numbers.get_all_candidates(s)
+    all_candidates = candidates | normalized_candidates | deobfuscated_candidates
 
     def type_sort(text):
         if text == 'verbatim':
@@ -1661,19 +1662,26 @@ def bisect_number_list(s, full_number_list, filename):
         line_number += 1
         (processed, normalized_set) = full_number_list[raw_number]
         line_matches = findspam.get_number_matches(candidates, normalized_candidates, deobfuscated_candidates,
-                                                   set([processed]), normalized_set)
+                                                   {processed}, normalized_set)
         types_list = list({types_regex.search(match)[0] for match in line_matches})
         types_list.sort(key=type_sort)
         types = ', '.join(types_list)
         if line_matches:
             matches.append((raw_number, (line_number, filename), types, line_matches))
+        elif include_partial:
+            partial_matches = {candidate + " found partially" for candidate in all_candidates
+                               if any(candidate in number for number in normalized_set)}
+            if partial_matches:
+                matches.append((raw_number, (line_number, filename), "partially", partial_matches))
     return matches
 
 
-def get_watch_and_blacklist_number_bisects(s):
+def get_watch_and_blacklist_number_bisects(s: str, include_partial=False):
     number_matching = []
-    number_matching.extend(bisect_number_list(s, GlobalVars.blacklisted_numbers_full, 'blacklisted_numbers.txt'))
-    number_matching.extend(bisect_number_list(s, GlobalVars.watched_numbers_full, 'watched_numbers.txt'))
+    number_matching.extend(bisect_number_list(s, GlobalVars.blacklisted_numbers_full, 'blacklisted_numbers.txt',
+                                              include_partial=include_partial))
+    number_matching.extend(bisect_number_list(s, GlobalVars.watched_numbers_full, 'watched_numbers.txt',
+                                              include_partial=include_partial))
     number_matching = [(raw_pattern, line_and_filename, ' matched ' + match_types, full_match_list)
                        for (raw_pattern, line_and_filename, match_types, full_match_list) in number_matching]
     return number_matching
@@ -1747,8 +1755,9 @@ def bisect(msg, s):
             + timeout_error_message)
 
 
-@command(str, privileged=True, whole_msg=True, aliases=['what-number'])
-def bisect_number(msg, s):
+@command(str, privileged=True, whole_msg=True, give_name=True,
+         aliases=['what-number', 'bisect-number-partial', 'what-number-partial'])
+def bisect_number(msg, s: str, alias_used='bisect-number'):
     if msg is not None:
         minimally_validate_content_source(msg)
     try:
@@ -1756,14 +1765,13 @@ def bisect_number(msg, s):
     except AttributeError:
         pass
 
-    matching = get_watch_and_blacklist_number_bisects(s)
+    matching = get_watch_and_blacklist_number_bisects(s, include_partial=alias_used.endswith('-partial'))
 
     if not matching:
         return "{!r} is not caught by a blacklist or watchlist number.".format(s)
 
     if len(matching) == 1:
         raw_pattern, (line_number, filename), match_type, full_match_list = matching[0]
-        match_type = " matched " + match_type if match_type else ''
         return "Matched by `{0}` on [line {1} of {2}](https://github.com/{3}/blob/{4}/{2}#L{1}): {5}".format(
             raw_pattern, line_number, filename, GlobalVars.bot_repo_slug, GlobalVars.commit.id,
             '; '.join(full_match_list))

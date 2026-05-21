@@ -156,21 +156,27 @@ fifabay on line 3 of bad_keywords.txt
 1-816-787-3816 matched verbatim, normalized, obfuscated on line 2 of blacklisted_numbers.txt
 +447459294174 matched obfuscated on line 6 of blacklisted_numbers.txt"""),
     # Obfuscated number and blacklisted keyword, which shouldn't be detected
-    ("bisect_number", "09 bar +447459294174 bar fifabay", r"""Matched by `+447459294174` on [line 6 of blacklisted_numbers.txt](https://github.com/{bot_repo_slug}/blob/{commit_id}/blacklisted_numbers.txt#L6): +447459294174 found verbatim"""),
+    ("bisect-number", "09 bar +447459294174 bar fifabay", r"""Matched by `+447459294174` on [line 6 of blacklisted_numbers.txt](https://github.com/{bot_repo_slug}/blob/{commit_id}/blacklisted_numbers.txt#L6): +447459294174 found verbatim"""),
     # two numbers, one obfuscated
     # We do not test "1-816-787-38I6" here, because it will be detected obfuscated both as 18167873816 and 8167873816 and
     # the order in which those two are reported is indeterminate (i.e. however the set() ended up ordered).
-    ("bisect_number", "10 bar 816-787-38I6 bar 447459294174 bar", r"""Matched by the following:
+    ("bisect-number", "10 bar 816-787-38I6 bar 447459294174 bar", r"""Matched by the following:
 1-816-787-3816 on line 2 of blacklisted_numbers.txt: 8167873816 found obfuscated
 +447459294174 on line 6 of blacklisted_numbers.txt: 447459294174 found normalized"""),
     # 2 obfuscated numbers: one twice with second verbatim
-    ("bisect_number", "11 bar 8I6a787a38I6 bar 4474S9294I74 bar1-816-787-3816 bar", r"""Matched by the following:
+    ("bisect-number", "11 bar 8I6a787a38I6 bar 4474S9294I74 bar1-816-787-3816 bar", r"""Matched by the following:
 1-816-787-3816 on line 2 of blacklisted_numbers.txt: 1-816-787-3816 found verbatim; 8167873816 found normalized; 8167873816 found obfuscated
 +447459294174 on line 6 of blacklisted_numbers.txt: 447459294174 found obfuscated"""),
     # normalized without 1
-    ("bisect_number", "12 bar 8167873816 bar", """Matched by `1-816-787-3816` on [line 2 of blacklisted_numbers.txt](https://github.com/{bot_repo_slug}/blob/{commit_id}/blacklisted_numbers.txt#L2): 8167873816 found normalized"""),
+    ("bisect-number", "12 bar 8167873816 bar", """Matched by `1-816-787-3816` on [line 2 of blacklisted_numbers.txt](https://github.com/{bot_repo_slug}/blob/{commit_id}/blacklisted_numbers.txt#L2): 8167873816 found normalized"""),
     # normalized with 1
-    ("bisect_number", "13 bar 18167873816 bar", """Matched by `1-816-787-3816` on [line 2 of blacklisted_numbers.txt](https://github.com/{bot_repo_slug}/blob/{commit_id}/blacklisted_numbers.txt#L2): 18167873816 found normalized"""),
+    ("bisect-number", "13 bar 18167873816 bar", """Matched by `1-816-787-3816` on [line 2 of blacklisted_numbers.txt](https://github.com/{bot_repo_slug}/blob/{commit_id}/blacklisted_numbers.txt#L2): 18167873816 found normalized"""),
+    ("bisect-number-partial", "7459294174",
+     """Matched by `+447459294174` on [line 6 of blacklisted_numbers.txt](https://github.com/{bot_repo_slug}/blob/{commit_id}/blacklisted_numbers.txt#L6): 7459294174 found partially"""),
+    ("bisect-number-partial", "8000119116",
+     r"""Matched by the following:
+0800-0-119-116 on line 23 of blacklisted_numbers.txt: 8000119116 found partially
+800-0-119-116 on line 24 of blacklisted_numbers.txt: 8000119116 found normalized"""),
 ])
 @rewrap_for_paramiterized_test_bisect()
 @lock_and_restore_chatcommunicate_rooms()
@@ -199,8 +205,8 @@ def test_bisect(command, test_text, expected_result):
     # part of the expected results.
     expected_result = regex.sub(r"(\{\d+(?:,\d+)?\})", r'{\1}', expected_result)
     formatted_expected_result = expected_result.format(test_text=test_text, bot_repo_slug=GlobalVars.bot_repo_slug, commit_id=GlobalVars.commit.id)
-    chat_command = getattr(chatcommands, command)
-    result = chat_command(None, original_msg=msg)
+    chat_command = chatcommunicate._prefix_commands[command][0]
+    result = chat_command(None, original_msg=msg, alias_used=command)
     print('formatted_expected_result:', formatted_expected_result)
     print('                   result:', result)
     assert result == formatted_expected_result
